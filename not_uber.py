@@ -4,7 +4,6 @@ import heapq
 from datetime import datetime, timedelta
 import json
 import random
-import time
 
 class NotUber:
     def __init__(self):
@@ -98,7 +97,7 @@ class NotUber:
         arrival_time = max(passenger[0], driver[0]) + timedelta(hours=total_travel_time)
 
         # 10% probability of drivers logging off
-        if random.random() > 0.1:
+        if random.random() > .05:
             # set the new entry time, lat, and lon for driver as the drop off of the previous passenger
             driver[0] = arrival_time
             driver[1] = self.nodes[passenger_dest_node]['lat']
@@ -172,7 +171,7 @@ class NotUber:
         return dlat**2 + dlon**2
 
 
-start_time = time.time()
+start_time = datetime.now()
 print(start_time)
 not_uber = NotUber()
 d1_total = 0
@@ -182,7 +181,8 @@ while not not_uber.passenger_queue.empty() and not_uber.driver_queue:
     d1, d2 = not_uber.match_ride_t1()
     d1_total += d1
     d2_total += d2
-end_time = time.time()
+end_time = datetime.now()
 # duration in minutes
-duration = (end_time - start_time)/60
+duration = (end_time - start_time).total_seconds() / 60
+print("Passenger queue empty: " + str(not_uber.passenger_queue.empty()))
 print(d1_total/num_passengers, d2_total/num_passengers, duration)
