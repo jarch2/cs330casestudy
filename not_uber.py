@@ -6,10 +6,20 @@ import json
 
 class NotUber:
     def __init__(self):
+        def create_edges_dict(filename):
+            data = {}
+            with open(filename, newline='') as csvfile:
+                reader = csv.reader(csvfile)
+                weekday_labels = reader[0][3:]
+                for row in reader[1:]:
+                    length = float(row[2])
+                    for i in range(len(weekday_labels)):
+                        data[row[0]][row[1]][weekday_labels[i]] = length/float(row[i+3])
+            return data
         self.passenger_queue = Queue()
         self.driver_queue = []
         self.nodes = self.load_json('node_data.json')
-        self.adjacency = self.load_json('adjacency-1.json')
+        self.adjacency = create_edges_dict('edges.csv')
         self.load_passengers('passengers.csv')
         self.load_drivers('drivers.csv')
 
@@ -92,8 +102,34 @@ class NotUber:
                 closest_node = node_id
         return closest_node
 
-    def calc_travel_time(self, source_node, dest_node):
-        return self.adjacency[source_node][dest_node]['time']
+    def calc_travel_time(self, source_node, dest_node, current_time):
+
+        def datetime_to_string(dt):
+            if dt.weekday() >= 5:
+                day_type = 'weekend'
+            else:
+                day_type = 'weekday'
+            hour = dt.hour
+            return f"{day_type}_{hour}"
+        
+        time = datetime_to_string(current_time)
+
+
+        dist = {}
+        dist[source_node] = 0
+        pq = []
+        pq.add(source_node)
+
+        while not pq.empty():
+            current = pq.pop()
+
+            for neighbor in self.adjacency[current]:
+                new_weight = dist[current] + neighbor[time]
+                #if new_weight < dist[neighbor]
+
+            
+
+
     
     def convert_string_to_datetime(self, date_string):
         date_format = "%m/%d/%Y %H:%M:%S"
@@ -102,8 +138,8 @@ class NotUber:
 
     def load_json(self, filename):
         with open(filename, 'r') as file:
-            node_data = json.load(file)
-        return node_data
+            data = json.load(file, encoding="utf-8")
+        return data
 
     def euclidean_distance(self, lat1, lon1, lat2, lon2):
         dlat = lat2 - lat1
