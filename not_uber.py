@@ -3,6 +3,8 @@ from queue import Queue
 import heapq
 from datetime import datetime, timedelta
 import json
+import random
+import time
 
 class NotUber:
     def __init__(self):
@@ -26,11 +28,10 @@ class NotUber:
 
             return data
         self.passenger_queue = Queue()
-        self.driver_queue = []
+        self.driver_queue = self.load_drivers('drivers.csv')
         self.nodes = self.load_json('node_data.json')
         self.adjacency = create_edges_dict('edges.csv')
         self.load_passengers('passengers.csv')
-        self.load_drivers('drivers.csv')
 
     def load_passengers(self, passengers_csv):
         def read_csv(filename):
@@ -53,7 +54,7 @@ class NotUber:
                     data.append(correct_datatype_row)
             return data
         passengers = read_csv(passengers_csv)
-        for passenger in passengers[1:]:
+        for passenger in passengers:
             self.passenger_queue.put(passenger)
 
     def load_drivers(self, drivers_file):
@@ -73,13 +74,13 @@ class NotUber:
                     data.append(correct_datatype_row)
             return data
         drivers = read_csv(drivers_file)
-        for driver in drivers[1:]:
-            heapq.heappush(self.driver_queue, (driver[0], driver))
-
+        heapq.heapify(drivers)
+        return drivers
+        
     def match_ride_t1(self):
         if not self.passenger_queue.empty() and self.driver_queue:
             passenger = self.passenger_queue.get()
-            _, driver = heapq.heappop(self.driver_queue)
+            driver = heapq.heappop(self.driver_queue)
             return self.assign_ride(driver, passenger)
         return None
 
@@ -96,11 +97,13 @@ class NotUber:
         # date time object
         arrival_time = max(passenger[0], driver[0]) + timedelta(hours=total_travel_time)
 
-        # set the new entry time, lat, and lon for driver as the drop off of the previous passenger
-        driver[0] = arrival_time
-        driver[1] = self.nodes[passenger_dest_node]['lat']
-        driver[2] = self.nodes[passenger_dest_node]['lon']
-        heapq.heappush(self.driver_queue, (driver[0], driver))
+        # 10% probability of drivers logging off
+        if random.random() > 0.1:
+            # set the new entry time, lat, and lon for driver as the drop off of the previous passenger
+            driver[0] = arrival_time
+            driver[1] = self.nodes[passenger_dest_node]['lat']
+            driver[2] = self.nodes[passenger_dest_node]['lon']
+            heapq.heappush(self.driver_queue, driver)
 
         # for benchmarking
         d1 = (arrival_time - passenger[0]).total_seconds() / 60
@@ -142,7 +145,6 @@ class NotUber:
 
 
     def calc_travel_time(self, source_node, dest_node, current_time):
-
         def datetime_to_string(dt):
             if dt.weekday() >= 5:
                 day_type = 'weekend'
@@ -154,10 +156,6 @@ class NotUber:
         return self.dijkstra(source_node, dest_node, datetime_to_string(current_time))
 
 
-            
-
-
-    
     def convert_string_to_datetime(self, date_string):
         date_format = "%m/%d/%Y %H:%M:%S"
         date_object = datetime.strptime(date_string, date_format)
@@ -165,7 +163,7 @@ class NotUber:
 
     def load_json(self, filename):
         with open(filename, 'r') as file:
-            data = json.load(file, encoding="utf-8")
+            data = json.load(file)
         return data
 
     def euclidean_distance(self, lat1, lon1, lat2, lon2):
@@ -174,12 +172,17 @@ class NotUber:
         return dlat**2 + dlon**2
 
 
+start_time = time.time()
+print(start_time)
 not_uber = NotUber()
 d1_total = 0
 d2_total = 0
 num_passengers = not_uber.passenger_queue.qsize()
-while not not_uber.passenger_queue.empty():
+while not not_uber.passenger_queue.empty() and not_uber.driver_queue:
     d1, d2 = not_uber.match_ride_t1()
     d1_total += d1
     d2_total += d2
-print(d1_total/num_passengers, d2_total/num_passengers)
+end_time = time.time()
+# duration in minutes
+duration = (end_time - start_time)/60
+print(d1_total/num_passengers, d2_total/num_passengers, duration)
