@@ -10,11 +10,20 @@ class NotUber:
             data = {}
             with open(filename, newline='') as csvfile:
                 reader = csv.reader(csvfile)
-                weekday_labels = reader[0][3:]
-                for row in reader[1:]:
-                    length = float(row[2])
-                    for i in range(len(weekday_labels)):
-                        data[row[0]][row[1]][weekday_labels[i]] = length/float(row[i+3])
+                weekday_labels = next(reader)[3:]
+                for row in reader:
+                    for row in reader:
+                        source, destination = row[0], row[1]
+                        length = float(row[2])
+
+                        if source not in data:
+                            data[source] = {}
+                        if destination not in data[source]:
+                            data[source][destination] = {}
+
+                        for i, label in enumerate(weekday_labels):
+                            data[source][destination][label] = length / float(row[i + 3])
+
             return data
         self.passenger_queue = Queue()
         self.driver_queue = []
@@ -76,8 +85,8 @@ class NotUber:
         driver_node = self.find_closest_node(driver[1], driver[2])
         passenger_source_node = self.find_closest_node(passenger[1], passenger[2])
         passenger_dest_node = self.find_closest_node(passenger[3], passenger[4])
-        travel_time_driver_to_passenger = self.calc_travel_time(driver_node, passenger_source_node)
-        travel_time = self.calc_travel_time(passenger_source_node, passenger_dest_node)
+        travel_time_driver_to_passenger = self.calc_travel_time(driver_node, passenger_source_node, max(passenger[0], driver[0]))
+        travel_time = self.calc_travel_time(passenger_source_node, passenger_dest_node, max(passenger[0], driver[0]))
         total_travel_time = travel_time_driver_to_passenger + travel_time
         arrival_time = max(passenger[0], driver[0]) + timedelta(hours=total_travel_time)
 
@@ -101,6 +110,30 @@ class NotUber:
                 min_distance = dist
                 closest_node = node_id
         return closest_node
+    
+    def dijkstra(self, source, dest, day_hour):
+        pq = [(0, source)]  # Priority queue as a min-heap with (distance, node)
+        visited = set()
+
+        while pq:
+            (dist, current_node) = heapq.heappop(pq)
+
+            if current_node == dest:
+                return dist
+
+            if current_node in visited:
+                continue
+
+            visited.add(current_node)
+
+            for neighbor in self.adjacency.get(current_node, {}):
+                if neighbor not in visited:
+                    weight = self.adjacency[current_node][neighbor][day_hour]  
+                    heapq.heappush(pq, (dist + weight, neighbor))
+
+        print("xxxyyyzzz")
+        return float('inf')
+
 
     def calc_travel_time(self, source_node, dest_node, current_time):
 
@@ -112,20 +145,8 @@ class NotUber:
             hour = dt.hour
             return f"{day_type}_{hour}"
         
-        time = datetime_to_string(current_time)
+        return self.dijkstra(source_node, dest_node, datetime_to_string(current_time))
 
-
-        dist = {}
-        dist[source_node] = 0
-        pq = []
-        pq.add(source_node)
-
-        while not pq.empty():
-            current = pq.pop()
-
-            for neighbor in self.adjacency[current]:
-                new_weight = dist[current] + neighbor[time]
-                #if new_weight < dist[neighbor]
 
             
 
