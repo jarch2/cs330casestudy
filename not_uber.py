@@ -37,6 +37,7 @@ class NotUber:
             data = []
             with open(filename, newline='') as csvfile:
                 reader = csv.reader(csvfile)
+                next(reader)
                 for row in reader:
                     correct_datatype_row = []
                     # datetime
@@ -60,6 +61,7 @@ class NotUber:
             data = []
             with open(filename, newline='') as csvfile:
                 reader = csv.reader(csvfile)
+                next(reader)
                 for row in reader:
                     correct_datatype_row = []
                     # datetime
