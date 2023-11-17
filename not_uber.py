@@ -78,7 +78,7 @@ class NotUber:
 
     def match_ride_t1(self):
         if not self.passenger_queue.empty() and self.driver_queue:
-            passenger = self.passenger_queue.pop()
+            passenger = self.passenger_queue.get()
             _, driver = heapq.heappop(self.driver_queue)
             return self.assign_ride(driver, passenger)
         return None
@@ -87,9 +87,13 @@ class NotUber:
         driver_node = self.find_closest_node(driver[1], driver[2])
         passenger_source_node = self.find_closest_node(passenger[1], passenger[2])
         passenger_dest_node = self.find_closest_node(passenger[3], passenger[4])
+        # float representing hours
         travel_time_driver_to_passenger = self.calc_travel_time(driver_node, passenger_source_node, max(passenger[0], driver[0]))
+        # float representing hours
         travel_time = self.calc_travel_time(passenger_source_node, passenger_dest_node, max(passenger[0], driver[0]))
+        # float representing hours
         total_travel_time = travel_time_driver_to_passenger + travel_time
+        # date time object
         arrival_time = max(passenger[0], driver[0]) + timedelta(hours=total_travel_time)
 
         # set the new entry time, lat, and lon for driver as the drop off of the previous passenger
@@ -100,7 +104,7 @@ class NotUber:
 
         # for benchmarking
         d1 = (arrival_time - passenger[0]).total_seconds() / 60
-        d2 = (travel_time - travel_time_driver_to_passenger).total_seconds() / 60
+        d2 = travel_time - travel_time_driver_to_passenger * 60 
         return d1, d2
 
     def find_closest_node(self, lat, lon):
