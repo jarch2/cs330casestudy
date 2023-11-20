@@ -76,39 +76,6 @@ class NotUber:
         drivers = read_csv(drivers_file)
         heapq.heapify(drivers)
         return drivers
-        
-    def match_ride_t1(self):
-        if self.passenger_queue and self.driver_queue:
-            passenger = self.passenger_queue.popleft()
-            driver = heapq.heappop(self.driver_queue)
-            return self.assign_ride(driver, passenger)
-        return None
-
-    def assign_ride(self, driver, passenger):
-        driver_node = self.find_closest_node(driver[1], driver[2])
-        passenger_source_node = self.find_closest_node(passenger[1], passenger[2])
-        passenger_dest_node = self.find_closest_node(passenger[3], passenger[4])
-        # float representing hours: driver location to passenger pick up time
-        travel_time_driver_to_passenger = self.calc_travel_time(driver_node, passenger_source_node, max(passenger[0], driver[0]))
-        # float representing hours: pick up to drop off time
-        travel_time = self.calc_travel_time(passenger_source_node, passenger_dest_node, max(passenger[0], driver[0]))
-        # float representing hours
-        total_travel_time = travel_time_driver_to_passenger + travel_time
-        # date time object
-        arrival_time = max(passenger[0], driver[0]) + timedelta(hours=total_travel_time)
-
-        # 10% probability of drivers logging off
-        if random.random() > .05:
-            # set the new entry time, lat, and lon for driver as the drop off of the previous passenger
-            driver[0] = arrival_time
-            driver[1] = self.nodes[passenger_dest_node]['lat']
-            driver[2] = self.nodes[passenger_dest_node]['lon']
-            heapq.heappush(self.driver_queue, driver)
-
-        # for benchmarking
-        d1 = (arrival_time - passenger[0]).total_seconds() / 60
-        d2 = (travel_time - travel_time_driver_to_passenger) * 60 
-        return d1, d2
 
     def find_closest_node(self, lat, lon):
         closest_node = None
@@ -140,7 +107,6 @@ class NotUber:
                     weight = self.adjacency[current_node][neighbor][day_hour]  
                     heapq.heappush(pq, (dist + weight, neighbor))
 
-        print("xxxyyyzzz")
         return float('inf')
 
 
@@ -172,6 +138,59 @@ class NotUber:
         return dlat**2 + dlon**2
 
 
+    def assign_ride(self, driver, passenger):
+        driver_node = self.find_closest_node(driver[1], driver[2])
+        passenger_source_node = self.find_closest_node(passenger[1], passenger[2])
+        passenger_dest_node = self.find_closest_node(passenger[3], passenger[4])
+        # float representing hours: driver location to passenger pick up time
+        travel_time_driver_to_passenger = self.calc_travel_time(driver_node, passenger_source_node, max(passenger[0], driver[0]))
+        # float representing hours: pick up to drop off time
+        travel_time = self.calc_travel_time(passenger_source_node, passenger_dest_node, max(passenger[0], driver[0]))
+        # float representing hours
+        total_travel_time = travel_time_driver_to_passenger + travel_time
+        # date time object
+        arrival_time = max(passenger[0], driver[0]) + timedelta(hours=total_travel_time)
+
+        # 10% probability of drivers logging off
+        if random.random() > .05:
+            # set the new entry time, lat, and lon for driver as the drop off of the previous passenger
+            driver[0] = arrival_time
+            driver[1] = self.nodes[passenger_dest_node]['lat']
+            driver[2] = self.nodes[passenger_dest_node]['lon']
+            heapq.heappush(self.driver_queue, driver)
+
+        # for benchmarking
+        d1 = (arrival_time - passenger[0]).total_seconds() / 60
+        d2 = (travel_time - travel_time_driver_to_passenger) * 60 
+        return d1, d2
+    
+    # finds the closest passenger out of the ones who are actively searching for a driver
+    def find_nearest(self, driver):
+        min_distance = float('inf')
+        nearest_passenger = None
+        for passenger in self.passenger_queue:
+            if passenger[0] <= driver[0]:
+                distance = self.euclidean_distance(driver[1], driver[2], passenger[1], passenger[2])
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest_passenger = passenger
+            else:
+                break
+        return nearest_passenger
+    
+    # matches the next driver with the closest waiting passenger
+    def match_ride_t2(self):
+        driver = heapq.heappop(self.driver_queue)
+        nearest_passenger = not_uber.find_nearest(driver)
+        if nearest_passenger:
+            not_uber.passenger_queue.remove(nearest_passenger)
+            return not_uber.assign_ride(driver, nearest_passenger)
+        # if there are no passengers actively waiting, matches this driver with the next passenger
+        else:
+            passenger = not_uber.passenger_queue.popleft()
+            return not_uber.assign_ride(driver, passenger)
+
+
 start_time = datetime.now()
 print(start_time)
 not_uber = NotUber()
@@ -179,7 +198,7 @@ d1_total = 0
 d2_total = 0
 num_passengers = len(not_uber.passenger_queue)
 while not_uber.passenger_queue and not_uber.driver_queue:
-    d1, d2 = not_uber.match_ride_t1()
+    d1, d2 = not_uber.match_ride_t2()
     d1_total += d1
     d2_total += d2
 end_time = datetime.now()
