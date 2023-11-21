@@ -337,7 +337,7 @@ print("unmatched drivers:\t", unmatched_drivers)
 print()
 
 print("average d1 per passenger:\t", d1_total / (num_passengers - unmatched_passengers))
-print("average d2 per driver:\t", d2_total / num_drivers)
+print("average d2 per ride:\t", d2_total / (num_passengers - unmatched_passengers))
 
 print()
 

@@ -176,10 +176,10 @@ class NotUber:
         passenger_dest_node = self.find_closest_node(passenger[3], passenger[4])
 
 
-        # float representing hours: pick up to drop off time
+        # pick up to drop off time in minutes
         delivery_time= 60 * self.calc_travel_time(passenger_source_node, passenger_dest_node, self.timestamp)
 
-        # float representing hours
+        # minutes
         trip_time = min_to_pickup + delivery_time
 
         # date time object
@@ -323,7 +323,7 @@ print("unmatched drivers:\t", unmatched_drivers)
 print()
 
 print("average d1 per passenger:\t", d1_total / (num_passengers - unmatched_passengers))
-print("average d2 per driver:\t", d2_total / num_drivers)
+print("average d2 per ride:\t", d2_total / (num_passengers - unmatched_passengers))
 
 print()
 

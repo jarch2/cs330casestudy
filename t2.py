@@ -138,8 +138,8 @@ class NotUber:
     def try_match(self):
         d1_total = 0
         d2_total = 0
-        if self.waiting_passengers and self.waiting_drivers:
-            # if there is 1 passenger and multiple drivers available
+        while self.waiting_passengers and self.waiting_drivers:
+            # if there are fewer passengers than drivers available
             if len(self.waiting_passengers) < len(self.waiting_drivers):
                 # make every match possible
                 selected_passenger = self.waiting_passengers.popleft()
@@ -153,7 +153,7 @@ class NotUber:
                         selected_driver = driver
                 
                 self.waiting_drivers.remove(selected_driver)
-            # if there is 1 driver and multiple passengers available
+            # if there are more drivers than passengers available
             else:
                 selected_driver = self.waiting_drivers.popleft()
                 min_dist = float("inf")
@@ -180,10 +180,10 @@ class NotUber:
 
         min_to_pickup = 60 * self.calc_travel_time(driver_node, passenger_source_node, self.timestamp)
 
-        # float representing hours: pick up to drop off time
-        delivery_time= 60 * self.calc_travel_time(passenger_source_node, passenger_dest_node, self.timestamp)
+        # pick up to drop off time in minutes
+        delivery_time = 60 * self.calc_travel_time(passenger_source_node, passenger_dest_node, self.timestamp)
 
-        # float representing hours
+        # minutes
         trip_time = min_to_pickup + delivery_time
 
         # date time object
@@ -294,7 +294,7 @@ print("unmatched drivers:\t", unmatched_drivers)
 print()
 
 print("average d1 per passenger:\t", d1_total / (num_passengers - unmatched_passengers))
-print("average d2 per driver:\t", d2_total / num_drivers)
+print("average d2 per ride:\t", d2_total / (num_passengers - unmatched_passengers))
 
 print()
 
