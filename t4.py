@@ -6,6 +6,12 @@ import json
 import random
 from collections import deque
 
+class Node:
+        def __init__(self, data):
+            self.data = data
+            self.left = None
+            self.right = None
+
 class NotUber:
     def __init__(self):
         #should be the same for every task
@@ -25,11 +31,66 @@ class NotUber:
         self.waiting_passengers = deque()
         self.waiting_drivers = deque()
 
-        self.driver_nodes = {}
+        self.driver_nodes =  {}
+
+        self.node_tree = self.build_kd_tree(list(self.nodes.keys()), 0)
 
         self.total_pickup_time = 0
         self.total_delivery_time = 0
         self.total_passenger_match_wait = 0
+
+    def build_kd_tree(self, nodes, depth):
+        if len(nodes) == 0:
+            return None
+        
+        keys = ["lat", "lon"]
+        nodes.sort(key=lambda x: self.nodes[x][keys[depth%2]])
+        middle = len(nodes) // 2
+
+        new_node = Node(nodes[middle])
+
+        new_node.left = self.build_kd_tree(nodes[:middle], depth + 1)
+        new_node.right = self.build_kd_tree(nodes[middle + 1:], depth + 1)
+
+        return new_node
+    
+    def tree_nearest_node(self, lat, lon):
+        best = self.node_tree.data
+        best_dist = float('inf')
+
+        def search(tree, depth):
+            
+            if tree is None:
+                return
+            
+            nonlocal best
+            nonlocal best_dist
+            
+            tree_lat = self.nodes[tree.data]['lat']
+            tree_lon = self.nodes[tree.data]['lon']
+            distance = self.euclidean_distance(lat, lon, tree_lat, tree_lon)
+            if distance < best_dist:
+                best = tree.data
+                best_dist = distance
+            
+            diff = 0
+            if depth % 2 == 0:
+                diff = lat - self.nodes[tree.data]['lat']
+            else:
+                diff = lon - self.nodes[tree.data]['lon']
+
+            if diff <= 0:
+                close, away = tree.left, tree.right
+            else:
+                close, away = tree.right, tree.left
+            
+            search(tree=close, depth=depth+1)
+            if diff**2 < best_dist:
+                search(tree=away, depth=depth+1)
+        
+        search(self.node_tree, 0)
+        return best
+
 
     #region utils
     def create_edges_dict(self, filename):
@@ -207,14 +268,7 @@ class NotUber:
         return d1, d2
 
     def find_closest_node(self, lat, lon):
-        closest_node = None
-        min_distance = float('inf')
-        for node_id, coords in self.nodes.items():
-            dist = self.euclidean_distance(lat, lon, coords['lat'], coords['lon'])
-            if dist < min_distance:
-                min_distance = dist
-                closest_node = node_id
-        return closest_node
+        return self.tree_nearest_node(lat, lon)
     
     def manhattan_dist(self, source_node, dest_node):
         source_coords = self.nodes[source_node]
@@ -252,6 +306,7 @@ class NotUber:
 
         print("xxxyyyzzz")
         return float('inf')
+
     
     def find_closest_driver_node(self, passenger_node):
         def datetime_to_string(dt):

@@ -27,6 +27,7 @@ class NotUber:
 
         self.total_pickup_time = 0
         self.total_delivery_time = 0
+        self.total_passenger_match_wait = 0
 
     #region utils
     def create_edges_dict(self, filename):
@@ -151,17 +152,16 @@ class NotUber:
         passenger_source_node = self.find_closest_node(passenger[1], passenger[2])
         passenger_dest_node = self.find_closest_node(passenger[3], passenger[4])
 
-        # float representing hours: driver location to passenger pick up time
-        travel_time_driver_to_passenger = self.calc_travel_time(driver_node, passenger_source_node, self.timestamp)
+        min_to_pickup = 60 * self.calc_travel_time(driver_node, passenger_source_node, self.timestamp)
 
         # float representing hours: pick up to drop off time
-        travel_time = self.calc_travel_time(passenger_source_node, passenger_dest_node, self.timestamp)
+        delivery_time= 60 * self.calc_travel_time(passenger_source_node, passenger_dest_node, self.timestamp)
 
         # float representing hours
-        total_travel_time = travel_time_driver_to_passenger + travel_time
+        trip_time = min_to_pickup + delivery_time
 
         # date time object
-        arrival_time = self.timestamp + timedelta(hours=total_travel_time)
+        arrival_time = self.timestamp + timedelta(minutes=trip_time)
 
         # drivers log off starting after 4 hours of being logged on
         # drivers always log off after finsihing a ride if they've been logged on for more than 9 hours
@@ -174,14 +174,16 @@ class NotUber:
             heapq.heappush(self.driver_re_entry, driver)
 
         # for benchmarking
-        d1 = (arrival_time - passenger[0]).total_seconds() / 60
-        d2 = (travel_time - travel_time_driver_to_passenger) * 60 
+        passenger_wait = (self.timestamp - passenger[0]).total_seconds() / 60
+        d1 = passenger_wait + trip_time
+        d2 = delivery_time - min_to_pickup
 
-        self.total_delivery_time += travel_time * 60
-        self.total_pickup_time += self.total_pickup_time * 60
+        self.total_delivery_time += delivery_time
+        self.total_pickup_time += min_to_pickup
+        self.total_passenger_match_wait += passenger_wait
 
         return d1, d2
-
+    
     def find_closest_node(self, lat, lon):
         closest_node = None
         min_distance = float('inf')
@@ -272,6 +274,7 @@ print()
 
 print("average pickup time per ride:\t", not_uber.total_pickup_time / num_passengers)
 print("average delivery time per ride:\t", not_uber.total_delivery_time / num_passengers)
+print("average passenger match wait per ride:\t", not_uber.total_passenger_match_wait / num_passengers)
 
 print()
 
