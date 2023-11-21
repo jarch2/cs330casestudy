@@ -134,21 +134,36 @@ class NotUber:
     def try_match(self):
         d1_total = 0
         d2_total = 0
-        while self.waiting_passengers and self.waiting_drivers:
-            # make every match possible
-            passenger = self.waiting_passengers.popleft()
-            min_dist = float("inf")
-            my_driver = None
+        if self.waiting_passengers and self.waiting_drivers:
+            # if there is 1 passenger and multiple drivers available
+            if len(self.waiting_passengers) < len(self.waiting_drivers):
+                # make every match possible
+                selected_passenger = self.waiting_passengers.popleft()
+                min_dist = float("inf")
+                selected_driver = None
 
-            for driver in self.waiting_drivers:
-                dist = self.euclidean_distance(driver[1], driver[2], passenger[1], passenger[1])
-                if dist < min_dist:
-                    min_dist = dist
-                    my_driver = driver
+                for driver in self.waiting_drivers:
+                    dist = self.euclidean_distance(driver[1], driver[2], selected_passenger[1], selected_passenger[2])
+                    if dist < min_dist:
+                        min_dist = dist
+                        selected_driver = driver
+                
+                self.waiting_drivers.remove(selected_driver)
+            # if there is 1 driver and multiple passengers available
+            else:
+                selected_driver = self.waiting_drivers.popleft()
+                min_dist = float("inf")
+                selected_passenger = None
+
+                for passenger in self.waiting_passengers:
+                    dist = self.euclidean_distance(selected_driver[1], selected_driver[2], passenger[1], passenger[2])
+                    if dist < min_dist:
+                        min_dist = dist
+                        selected_passenger = passenger
+                
+                self.waiting_passengers.remove(selected_passenger)
             
-            self.waiting_drivers.remove(my_driver)
-            
-            d1, d2 = self.assign_ride(my_driver, passenger)
+            d1, d2 = self.assign_ride(selected_driver, selected_passenger)
             d1_total += d1
             d2_total += d2
         
