@@ -287,6 +287,7 @@ sim_duration = (end_time - preprocess_time).total_seconds() / 60
 
 unmatched_passengers = len(not_uber.waiting_passengers)
 unmatched_drivers = len(not_uber.waiting_drivers)
+num_rides = num_passengers - unmatched_passengers
 
 print()
 
@@ -295,14 +296,14 @@ print("unmatched drivers:\t", unmatched_drivers)
 
 print()
 
-print("average d1:\t", d1_total / (num_passengers - unmatched_passengers))
-print("average d2:\t", d2_total / num_drivers)
+print("average d1:\t", d1_total / num_rides)
+print("average d2:\t", d2_total / num_rides)
 
 print()
 
-print("average wait for match:\t", not_uber.total_passenger_match_wait / num_passengers)
-print("average pickup time:\t", not_uber.total_pickup_time / num_passengers)
-print("average delivery time:\t", not_uber.total_delivery_time / num_passengers)
+print("average wait for match:\t", not_uber.total_passenger_match_wait / num_rides)
+print("average pickup time:\t", not_uber.total_pickup_time / num_rides)
+print("average delivery time:\t", not_uber.total_delivery_time / num_rides)
 
 print()
 
