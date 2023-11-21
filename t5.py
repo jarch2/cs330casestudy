@@ -217,9 +217,17 @@ class NotUber:
 
     
     def try_match(self):
+        cutoff = 500
         d1_total = 0
         d2_total = 0
+        removed_passengers = deque()
+        removed_drivers = deque()
         while self.waiting_passengers and self.waiting_drivers:
+            selected_driver = None
+            selected_passenger = None
+            d1 = 0
+            d2 = 0
+            
             # if passengers < drivers
             if len(self.waiting_passengers) < len(self.waiting_drivers):
                 selected_passenger = self.waiting_passengers.popleft()
@@ -233,9 +241,14 @@ class NotUber:
                 if driver_node == None:
                     print("something very wrong")
 
-                selected_driver = self.driver_nodes[driver_node].popleft()
-                if len(self.driver_nodes[driver_node]) == 0: self.driver_nodes.pop(driver_node)
-                self.waiting_drivers.remove(selected_driver)
+                passenger_wait = (self.timestamp - selected_passenger[0]).total_seconds() / 60
+
+                if (dist * 60 * (passenger_wait + 1) < cutoff):
+                    selected_driver = self.driver_nodes[driver_node].popleft()
+                    if len(self.driver_nodes[driver_node]) == 0: self.driver_nodes.pop(driver_node)
+                    self.waiting_drivers.remove(selected_driver)
+                else:
+                    removed_passengers.append(selected_passenger)
             
             # if drivers < passengers
             else:
@@ -250,14 +263,35 @@ class NotUber:
                 if passenger_node == None:
                     print("something very wrong")
 
-                selected_passenger = self.passenger_nodes[passenger_node].popleft()
-                if len(self.passenger_nodes[passenger_node]) == 0: self.passenger_nodes.pop(passenger_node)
-                self.waiting_passengers.remove(selected_passenger)
+                temp_passenger = self.passenger_nodes[passenger_node].popleft()
+                passenger_wait = (self.timestamp - temp_passenger[0]).total_seconds() / 60
+                if (dist * 60 * (passenger_wait + 1) < cutoff):
+                    selected_passenger = temp_passenger
+                    if len(self.passenger_nodes[passenger_node]) == 0: self.passenger_nodes.pop(passenger_node)
+                    self.waiting_passengers.remove(selected_passenger)
+                else:
+                    self.passenger_nodes[passenger_node].appendleft(temp_passenger)
+                    removed_drivers.append(selected_driver)
 
-            d1, d2 = self.assign_ride(selected_driver, selected_passenger, 60 * dist)
+            if selected_driver != None and selected_passenger != None:
+                d1, d2 = self.assign_ride(selected_driver, selected_passenger, 60 * dist)
         
             d1_total += d1
             d2_total += d2
+        
+        for passenger in removed_passengers:
+            self.waiting_passengers.append(passenger)
+            node = self.find_closest_node(passenger[1], passenger[2])
+            if node not in self.passenger_nodes.keys():
+                self.passenger_nodes[node] = deque()
+            self.passenger_nodes[node].append(passenger)
+
+        for driver in removed_drivers:
+            self.waiting_drivers.append(driver)
+            node = self.find_closest_node(driver[1], driver[2])
+            if node not in self.driver_nodes.keys():
+                self.driver_nodes[node] = deque()
+            self.driver_nodes[node].append(driver)
         
         return d1_total, d2_total
 
@@ -424,7 +458,7 @@ start_time = datetime.now()
 print("starting at ", start_time)
 
 not_uber = NotUber()
-not_uber.heuristic_mph = 60 # set the miles per hour to use in the heuristic function
+not_uber.heuristic_mph = 1 # set the miles per hour to use in the heuristic function
 print("setting heuristic mph to", not_uber.heuristic_mph)
 
 preprocess_time = datetime.now()

@@ -32,6 +32,8 @@ class NotUber:
         self.total_delivery_time = 0
         self.total_passenger_match_wait = 0
 
+        self.heuristic_mph = 0
+
     #region utils
     def create_edges_dict(self, filename):
         data = {}
@@ -254,7 +256,7 @@ class NotUber:
     def a_star(self, source, dest, day_hour):
         def h(source_node):
             miles = self.manhattan_dist(source_node, dest)
-            return miles
+            return miles / self.heuristic_mph
 
         pq = [(h(source), 0, source)]  # Priority queue as a min-heap with (distance, node)
         visited = set()
@@ -366,6 +368,8 @@ start_time = datetime.now()
 print("starting at ", start_time)
 
 not_uber = NotUber()
+not_uber.heuristic_mph = 30 # set the miles per hour to use in the heuristic function
+print("setting heuristic mph to", not_uber.heuristic_mph)
 
 preprocess_time = datetime.now()
 print("preprocessing done in " + str((preprocess_time - start_time).total_seconds() / 60))
