@@ -280,7 +280,7 @@ class NotUber:
     def a_star(self, source, dest, day_hour):
         def h(source_node):
             miles = self.manhattan_dist(source_node, dest)
-            return miles
+            return miles / 30
 
         pq = [(h(source), 0, source)]  # Priority queue as a min-heap with (distance, node)
         visited = set()
