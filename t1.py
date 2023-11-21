@@ -122,6 +122,7 @@ class NotUber:
 
         if (self.timestamp == driver_time):
             driver = self.driver_queue.popleft()
+            driver.append(driver[0])
             self.waiting_drivers.append(driver)
 
         if (self.timestamp == re_entry_time):
@@ -131,12 +132,16 @@ class NotUber:
         return self.try_match()
     
     def try_match(self):
-        if self.waiting_passengers and self.waiting_drivers:
+        d1_total = 0
+        d2_total = 0
+        while self.waiting_passengers and self.waiting_drivers:
             passenger = self.waiting_passengers.popleft()
             driver = self.waiting_drivers.popleft()
-            return self.assign_ride(driver, passenger)
-        # no match available
-        return None, None
+            d1, d2 = self.assign_ride(driver, passenger)
+            d1_total += d1
+            d2_total += d2
+        
+        return d1_total, d2_total
 
     def assign_ride(self, driver, passenger):
         driver_node = self.find_closest_node(driver[1], driver[2])
@@ -155,10 +160,10 @@ class NotUber:
         # date time object
         arrival_time = self.timestamp + timedelta(hours=total_travel_time)
 
-        # drivers log off starting after 1 hour of being logged on
-        # drivers always log off after finsihing a ride if they've been logged on for more than 4 hours
-        hours_logged = (self.timestamp - driver[0]).total_seconds() / 3600
-        if random.random() > ((hours_logged - 1) / 3):
+        # drivers log off starting after 4 hours of being logged on
+        # drivers always log off after finsihing a ride if they've been logged on for more than 9 hours
+        hours_logged = (arrival_time - driver[3]).total_seconds() / 3600
+        if random.random() > ((hours_logged - 4) / 5):
             # set the new entry time, lat, and lon for driver as the drop off of the previous passenger
             driver[0] = arrival_time
             driver[1] = self.nodes[passenger_dest_node]['lat']
