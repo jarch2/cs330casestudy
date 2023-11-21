@@ -26,6 +26,7 @@ class NotUber:
         self.waiting_drivers = deque()
 
         self.driver_nodes = {}
+        self.passenger_nodes = {}
 
         self.total_pickup_time = 0
         self.total_delivery_time = 0
@@ -125,6 +126,11 @@ class NotUber:
             passenger = self.passenger_queue.popleft()
             self.waiting_passengers.append(passenger)
 
+            node = self.find_closest_node(passenger[1], passenger[2])
+            if node not in self.passenger_nodes.keys():
+                self.passenger_nodes[node] = deque()
+            self.passenger_nodes[node].append(passenger)
+
         if (self.timestamp == driver_time):
             driver = self.driver_queue.popleft()
             driver.append(driver[0])
@@ -151,20 +157,36 @@ class NotUber:
         d1_total = 0
         d2_total = 0
         while self.waiting_passengers and self.waiting_drivers:
-            # make every match possible
-            passenger = self.waiting_passengers.popleft()
-            passenger_node = self.find_closest_node(passenger[1], passenger[2])
+            # if passengers < drivers
+            if len(self.waiting_passengers) < len(self.waiting_drivers):
+                selected_passenger = self.waiting_passengers.popleft()
+                passenger_node = self.find_closest_node(selected_passenger[1], selected_passenger[2])
 
-            driver_node, dist = self.find_closest_driver_node(passenger_node)
+                driver_node, dist = self.find_closest_driver_node(passenger_node)
 
-            if driver_node == None:
-                print("something very wrong")
+                if driver_node == None:
+                    print("something very wrong")
 
-            driver = self.driver_nodes[driver_node].popleft()
-            self.waiting_drivers.remove(driver)
-
-            d1, d2 = self.assign_ride(driver, passenger, 60 * dist)
+                selected_driver = self.driver_nodes[driver_node].popleft()
+                if len(self.driver_nodes[driver_node]) == 0: self.driver_nodes.pop(driver_node)
+                self.waiting_drivers.remove(selected_driver)
             
+            # if drivers < passengers
+            else:
+                selected_driver = self.waiting_drivers.popleft()
+                driver_node = self.find_closest_node(selected_driver[1], selected_driver[2])
+
+                passenger_node, dist = self.find_closest_passenger_node(driver_node)
+
+                if passenger_node == None:
+                    print("something very wrong")
+
+                selected_passenger = self.passenger_nodes[passenger_node].popleft()
+                if len(self.passenger_nodes[passenger_node]) == 0: self.passenger_nodes.pop(passenger_node)
+                self.waiting_passengers.remove(selected_passenger)
+
+            d1, d2 = self.assign_ride(selected_driver, selected_passenger, 60 * dist)
+        
             d1_total += d1
             d2_total += d2
         
@@ -266,6 +288,39 @@ class NotUber:
             for neighbor in self.adjacency.get(current_node, {}):
                 if neighbor not in visited:
                     weight = self.adjacency[neighbor][current_node][day_hour]  
+                    heapq.heappush(pq, (dist + weight, neighbor))
+
+        print("xxxyyyzzz")
+        return None, None
+    
+
+    def find_closest_passenger_node(self, driver_node):
+        def datetime_to_string(dt):
+            if dt.weekday() >= 5:
+                day_type = 'weekend'
+            else:
+                day_type = 'weekday'
+            hour = dt.hour
+            return f"{day_type}_{hour}"
+        
+        day_hour = datetime_to_string(self.timestamp)
+        pq = [(0, driver_node)]  # Priority queue as a min-heap with (distance, node)
+        visited = set()
+
+        while pq:
+            (dist, current_node) = heapq.heappop(pq)
+
+            if current_node in self.passenger_nodes.keys() and len(self.passenger_nodes[current_node]) > 0:
+                return current_node, dist
+
+            if current_node in visited:
+                continue
+
+            visited.add(current_node)
+
+            for neighbor in self.adjacency.get(current_node, {}):
+                if neighbor not in visited:
+                    weight = self.adjacency[current_node][neighbor][day_hour]  
                     heapq.heappush(pq, (dist + weight, neighbor))
 
         print("xxxyyyzzz")
