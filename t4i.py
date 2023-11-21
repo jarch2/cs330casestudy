@@ -451,3 +451,5 @@ print()
 
 print("total time:\t", duration)
 print("sim time:\t", sim_duration)
+
+print()
