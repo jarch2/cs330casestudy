@@ -160,7 +160,10 @@ class NotUber:
             # if passengers < drivers
             if len(self.waiting_passengers) < len(self.waiting_drivers):
                 selected_passenger = self.waiting_passengers.popleft()
+
                 passenger_node = self.find_closest_node(selected_passenger[1], selected_passenger[2])
+                self.passenger_nodes[passenger_node].remove(selected_passenger)
+                if len(self.passenger_nodes[passenger_node]) == 0: self.passenger_nodes.pop(passenger_node)
 
                 driver_node, dist = self.find_closest_driver_node(passenger_node)
 
@@ -174,7 +177,10 @@ class NotUber:
             # if drivers < passengers
             else:
                 selected_driver = self.waiting_drivers.popleft()
+
                 driver_node = self.find_closest_node(selected_driver[1], selected_driver[2])
+                self.driver_nodes[driver_node].remove(selected_driver)
+                if len(self.driver_nodes[driver_node]) == 0: self.driver_nodes.pop(driver_node)
 
                 passenger_node, dist = self.find_closest_passenger_node(driver_node)
 
