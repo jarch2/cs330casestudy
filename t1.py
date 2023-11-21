@@ -25,6 +25,9 @@ class NotUber:
         self.waiting_passengers = deque()
         self.waiting_drivers = deque()
 
+        self.total_pickup_time = 0
+        self.total_delivery_time = 0
+
     #region utils
     def create_edges_dict(self, filename):
         data = {}
@@ -173,6 +176,10 @@ class NotUber:
         # for benchmarking
         d1 = (arrival_time - passenger[0]).total_seconds() / 60
         d2 = (travel_time - travel_time_driver_to_passenger) * 60 
+
+        self.total_delivery_time += travel_time * 60
+        self.total_pickup_time += self.total_pickup_time * 60
+
         return d1, d2
 
     def find_closest_node(self, lat, lon):
@@ -253,11 +260,20 @@ sim_duration = (end_time - preprocess_time).total_seconds() / 60
 unmatched_passengers = len(not_uber.waiting_passengers)
 unmatched_drivers = len(not_uber.waiting_drivers)
 
-print("unmatched passengers: ", unmatched_passengers)
-print("unmatched drivers: ", unmatched_drivers)
+print("unmatched passengers:\t", unmatched_passengers)
+print("unmatched drivers:\t", unmatched_drivers)
 
-print("average d1: ", d1_total / (num_passengers - unmatched_passengers))
-print("average d2: ", d2_total / num_drivers)
+print()
 
-print("total time: ", duration)
-print("simulation time: ", sim_duration)
+print("average d1 per passenger:\t", d1_total / (num_passengers - unmatched_passengers))
+print("average d2 per driver:\t", d2_total / num_drivers)
+
+print()
+
+print("average pickup time per ride:\t", not_uber.total_pickup_time / num_passengers)
+print("average delivery time per ride:\t", not_uber.total_delivery_time / num_passengers)
+
+print()
+
+print("total time:\t", duration)
+print("simulation time:\t", sim_duration)

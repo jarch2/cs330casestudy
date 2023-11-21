@@ -27,6 +27,9 @@ class NotUber:
 
         self.driver_nodes = {}
 
+        self.total_pickup_time = 0
+        self.total_delivery_time = 0
+
     #region utils
     def create_edges_dict(self, filename):
         data = {}
@@ -193,7 +196,11 @@ class NotUber:
 
         # for benchmarking
         d1 = (arrival_time - passenger[0]).total_seconds() / 60
-        d2 = (travel_time - hours_to_pickup) * 60 
+        d2 = (travel_time - hours_to_pickup) * 60
+
+        self.total_delivery_time += travel_time * 60
+        self.total_pickup_time += self.total_pickup_time * 60
+        
         return d1, d2
 
     def find_closest_node(self, lat, lon):
@@ -206,12 +213,25 @@ class NotUber:
                 closest_node = node_id
         return closest_node
     
-    def dijkstra(self, source, dest, day_hour):
-        pq = [(0, source)]  # Priority queue as a min-heap with (distance, node)
+    def manhattan_dist(self, source_node, dest_node):
+        source_coords = self.nodes[source_node]
+        dest_coords = self.nodes[dest_node]
+        units = abs(source_coords['lat'] - dest_coords['lat'])
+        units += abs(source_coords['lon'] - dest_coords['lon'])
+        return units * 65
+    
+    def a_star(self, source, dest, day_hour):
+        def h(source_node):
+            miles = self.manhattan_dist(source, dest)
+            return miles
+
+        pq = [(h(source), 0, source)]  # Priority queue as a min-heap with (distance, node)
         visited = set()
+        cost_so_far = {}
+        cost_so_far[source] = 0
 
         while pq:
-            (dist, current_node) = heapq.heappop(pq)
+            (hscore, dist, current_node) = heapq.heappop(pq)
 
             if current_node == dest:
                 return dist
@@ -222,9 +242,10 @@ class NotUber:
             visited.add(current_node)
 
             for neighbor in self.adjacency.get(current_node, {}):
-                if neighbor not in visited:
-                    weight = self.adjacency[current_node][neighbor][day_hour]  
-                    heapq.heappush(pq, (dist + weight, neighbor))
+                new_cost = dist + self.adjacency[current_node][neighbor][day_hour]
+                if neighbor not in cost_so_far.keys() or new_cost < cost_so_far[neighbor]:
+                    heapq.heappush(pq, (new_cost + h(neighbor), new_cost, neighbor))
+                    cost_so_far[neighbor] = new_cost
 
         print("xxxyyyzzz")
         return float('inf')
@@ -272,7 +293,7 @@ class NotUber:
             hour = dt.hour
             return f"{day_type}_{hour}"
         
-        return self.dijkstra(source_node, dest_node, datetime_to_string(current_time))
+        return self.a_star(source_node, dest_node, datetime_to_string(current_time))
 
 
 
@@ -307,11 +328,20 @@ sim_duration = (end_time - preprocess_time).total_seconds() / 60
 unmatched_passengers = len(not_uber.waiting_passengers)
 unmatched_drivers = len(not_uber.waiting_drivers)
 
-print("unmatched passengers: ", unmatched_passengers)
-print("unmatched drivers: ", unmatched_drivers)
+print("unmatched passengers:\t", unmatched_passengers)
+print("unmatched drivers:\t", unmatched_drivers)
 
-print("average d1: ", d1_total / (num_passengers - unmatched_passengers))
-print("average d2: ", d2_total / num_drivers)
+print()
 
-print("total time: ", duration)
-print("simulation time: ", sim_duration)
+print("average d1 per passenger:\t", d1_total / (num_passengers - unmatched_passengers))
+print("average d2 per driver:\t", d2_total / num_drivers)
+
+print()
+
+print("average pickup time per ride:\t", not_uber.total_pickup_time / num_passengers)
+print("average delivery time per ride:\t", not_uber.total_delivery_time / num_passengers)
+
+print()
+
+print("total time:\t", duration)
+print("simulation time:\t", sim_duration)
