@@ -6,6 +6,12 @@ import json
 import random
 from collections import deque
 
+class Node:
+        def __init__(self, data):
+            self.data = data
+            self.left = None
+            self.right = None
+
 class NotUber:
     def __init__(self):
         #should be the same for every task
@@ -21,13 +27,70 @@ class NotUber:
         self.driver_re_entry = []
         heapq.heapify(self.driver_re_entry)
 
-        #specific to t1
+        #specific to t3
         self.waiting_passengers = deque()
         self.waiting_drivers = deque()
+
+        self.driver_nodes =  {}
+
+        self.node_tree = self.build_kd_tree(list(self.nodes.keys()), 0)
 
         self.total_pickup_time = 0
         self.total_delivery_time = 0
         self.total_passenger_match_wait = 0
+
+    def build_kd_tree(self, nodes, depth):
+        if len(nodes) == 0:
+            return None
+        
+        keys = ["lat", "lon"]
+        nodes.sort(key=lambda x: self.nodes[x][keys[depth%2]])
+        middle = len(nodes) // 2
+
+        new_node = Node(nodes[middle])
+
+        new_node.left = self.build_kd_tree(nodes[:middle], depth + 1)
+        new_node.right = self.build_kd_tree(nodes[middle + 1:], depth + 1)
+
+        return new_node
+    
+    def tree_nearest_node(self, lat, lon):
+        best = self.node_tree.data
+        best_dist = float('inf')
+
+        def search(tree, depth):
+            
+            if tree is None:
+                return
+            
+            nonlocal best
+            nonlocal best_dist
+            
+            tree_lat = self.nodes[tree.data]['lat']
+            tree_lon = self.nodes[tree.data]['lon']
+            distance = self.euclidean_distance(lat, lon, tree_lat, tree_lon)
+            if distance < best_dist:
+                best = tree.data
+                best_dist = distance
+            
+            diff = 0
+            if depth % 2 == 0:
+                diff = lat - self.nodes[tree.data]['lat']
+            else:
+                diff = lon - self.nodes[tree.data]['lon']
+
+            if diff <= 0:
+                close, away = tree.left, tree.right
+            else:
+                close, away = tree.right, tree.left
+            
+            search(tree=close, depth=depth+1)
+            if diff**2 < best_dist:
+                search(tree=away, depth=depth+1)
+        
+        search(self.node_tree, 0)
+        return best
+
 
     #region utils
     def create_edges_dict(self, filename):
@@ -36,17 +99,16 @@ class NotUber:
             reader = csv.reader(csvfile)
             weekday_labels = next(reader)[3:]
             for row in reader:
-                for row in reader:
-                    source, destination = row[0], row[1]
-                    length = float(row[2])
+                source, destination = row[0], row[1]
+                length = float(row[2])
 
-                    if source not in data:
-                        data[source] = {}
-                    if destination not in data[source]:
-                        data[source][destination] = {}
+                if source not in data:
+                    data[source] = {}
+                if destination not in data[source]:
+                    data[source][destination] = {}
 
-                    for i, label in enumerate(weekday_labels):
-                        data[source][destination][label] = length / float(row[i + 3])
+                for i, label in enumerate(weekday_labels):
+                    data[source][destination][label] = length / float(row[i + 3])
 
         return data
 
@@ -129,56 +191,51 @@ class NotUber:
             driver.append(driver[0])
             self.waiting_drivers.append(driver)
 
+            node = self.find_closest_node(driver[1], driver[2])
+            if node not in self.driver_nodes.keys():
+                self.driver_nodes[node] = deque()
+            self.driver_nodes[node].append(driver)
+           
         if (self.timestamp == re_entry_time):
             driver = heapq.heappop(self.driver_re_entry)
             self.waiting_drivers.append(driver)
 
+            node = self.find_closest_node(driver[1], driver[2])
+            if node not in self.driver_nodes:
+                self.driver_nodes[node] = deque()
+            self.driver_nodes[node].append(driver)
+
         return self.try_match()
+
     
     def try_match(self):
         d1_total = 0
         d2_total = 0
-        if self.waiting_passengers and self.waiting_drivers:
-            # if there is 1 passenger and multiple drivers available
-            if len(self.waiting_passengers) < len(self.waiting_drivers):
-                # make every match possible
-                selected_passenger = self.waiting_passengers.popleft()
-                min_dist = float("inf")
-                selected_driver = None
+        while self.waiting_passengers and self.waiting_drivers:
+            # make every match possible
+            passenger = self.waiting_passengers.popleft()
+            passenger_node = self.find_closest_node(passenger[1], passenger[2])
 
-                for driver in self.waiting_drivers:
-                    dist = self.euclidean_distance(driver[1], driver[2], selected_passenger[1], selected_passenger[2])
-                    if dist < min_dist:
-                        min_dist = dist
-                        selected_driver = driver
-                
-                self.waiting_drivers.remove(selected_driver)
-            # if there is 1 driver and multiple passengers available
-            else:
-                selected_driver = self.waiting_drivers.popleft()
-                min_dist = float("inf")
-                selected_passenger = None
+            driver_node, dist = self.find_closest_driver_node(passenger_node)
 
-                for passenger in self.waiting_passengers:
-                    dist = self.euclidean_distance(selected_driver[1], selected_driver[2], passenger[1], passenger[2])
-                    if dist < min_dist:
-                        min_dist = dist
-                        selected_passenger = passenger
-                
-                self.waiting_passengers.remove(selected_passenger)
+            if driver_node == None:
+                print("something very wrong")
+
+            driver = self.driver_nodes[driver_node].popleft()
+            self.waiting_drivers.remove(driver)
+
+            d1, d2 = self.assign_ride(driver, passenger, 60 * dist)
             
-            d1, d2 = self.assign_ride(selected_driver, selected_passenger)
             d1_total += d1
             d2_total += d2
         
         return d1_total, d2_total
 
-    def assign_ride(self, driver, passenger):
-        driver_node = self.find_closest_node(driver[1], driver[2])
+    def assign_ride(self, driver, passenger, min_to_pickup):
+
         passenger_source_node = self.find_closest_node(passenger[1], passenger[2])
         passenger_dest_node = self.find_closest_node(passenger[3], passenger[4])
 
-        min_to_pickup = 60 * self.calc_travel_time(driver_node, passenger_source_node, self.timestamp)
 
         # float representing hours: pick up to drop off time
         delivery_time= 60 * self.calc_travel_time(passenger_source_node, passenger_dest_node, self.timestamp)
@@ -211,21 +268,27 @@ class NotUber:
         return d1, d2
 
     def find_closest_node(self, lat, lon):
-        closest_node = None
-        min_distance = float('inf')
-        for node_id, coords in self.nodes.items():
-            dist = self.euclidean_distance(lat, lon, coords['lat'], coords['lon'])
-            if dist < min_distance:
-                min_distance = dist
-                closest_node = node_id
-        return closest_node
+        return self.tree_nearest_node(lat, lon)
     
-    def dijkstra(self, source, dest, day_hour):
-        pq = [(0, source)]  # Priority queue as a min-heap with (distance, node)
+    def manhattan_dist(self, source_node, dest_node):
+        source_coords = self.nodes[source_node]
+        dest_coords = self.nodes[dest_node]
+        units = abs(source_coords['lat'] - dest_coords['lat'])
+        units += abs(source_coords['lon'] - dest_coords['lon'])
+        return units * 65
+    
+    def a_star(self, source, dest, day_hour):
+        def h(source_node):
+            miles = self.manhattan_dist(source_node, dest)
+            return miles / 30
+
+        pq = [(h(source), 0, source)]  # Priority queue as a min-heap with (distance, node)
         visited = set()
+        cost_so_far = {}
+        cost_so_far[source] = 0
 
         while pq:
-            (dist, current_node) = heapq.heappop(pq)
+            (hscore, dist, current_node) = heapq.heappop(pq)
 
             if current_node == dest:
                 return dist
@@ -236,12 +299,47 @@ class NotUber:
             visited.add(current_node)
 
             for neighbor in self.adjacency.get(current_node, {}):
-                if neighbor not in visited:
-                    weight = self.adjacency[current_node][neighbor][day_hour]  
-                    heapq.heappush(pq, (dist + weight, neighbor))
+                new_cost = dist + self.adjacency[current_node][neighbor][day_hour]
+                if neighbor not in cost_so_far.keys() or new_cost < cost_so_far[neighbor]:
+                    heapq.heappush(pq, (new_cost + h(neighbor), new_cost, neighbor))
+                    cost_so_far[neighbor] = new_cost
 
         print("xxxyyyzzz")
         return float('inf')
+
+    
+    def find_closest_driver_node(self, passenger_node):
+        def datetime_to_string(dt):
+            if dt.weekday() >= 5:
+                day_type = 'weekend'
+            else:
+                day_type = 'weekday'
+            hour = dt.hour
+            return f"{day_type}_{hour}"
+        
+        day_hour = datetime_to_string(self.timestamp)
+        pq = [(0, passenger_node)]  # Priority queue as a min-heap with (distance, node)
+        visited = set()
+
+        while pq:
+            (dist, current_node) = heapq.heappop(pq)
+
+            if current_node in self.driver_nodes.keys() and len(self.driver_nodes[current_node]) > 0:
+                return current_node, dist
+
+            if current_node in visited:
+                continue
+
+            visited.add(current_node)
+
+            for neighbor in self.adjacency.get(current_node, {}):
+                if neighbor not in visited:
+                    weight = self.adjacency[neighbor][current_node][day_hour]  
+                    heapq.heappush(pq, (dist + weight, neighbor))
+
+        print("xxxyyyzzz")
+        return None, None
+    
 
 
     def calc_travel_time(self, source_node, dest_node, current_time):
@@ -253,7 +351,7 @@ class NotUber:
             hour = dt.hour
             return f"{day_type}_{hour}"
         
-        return self.dijkstra(source_node, dest_node, datetime_to_string(current_time))
+        return self.a_star(source_node, dest_node, datetime_to_string(current_time))
 
 
 

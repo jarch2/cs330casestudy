@@ -6,6 +6,12 @@ import json
 import random
 from collections import deque
 
+class Node:
+        def __init__(self, data):
+            self.data = data
+            self.left = None
+            self.right = None
+
 class NotUber:
     def __init__(self):
         #should be the same for every task
@@ -25,7 +31,66 @@ class NotUber:
         self.waiting_passengers = deque()
         self.waiting_drivers = deque()
 
-        self.driver_nodes = {}
+        self.driver_nodes =  {}
+
+        self.node_tree = self.build_kd_tree(list(self.nodes.keys()), 0)
+
+        self.total_pickup_time = 0
+        self.total_delivery_time = 0
+        self.total_passenger_match_wait = 0
+
+    def build_kd_tree(self, nodes, depth):
+        if len(nodes) == 0:
+            return None
+        
+        keys = ["lat", "lon"]
+        nodes.sort(key=lambda x: self.nodes[x][keys[depth%2]])
+        middle = len(nodes) // 2
+
+        new_node = Node(nodes[middle])
+
+        new_node.left = self.build_kd_tree(nodes[:middle], depth + 1)
+        new_node.right = self.build_kd_tree(nodes[middle + 1:], depth + 1)
+
+        return new_node
+    
+    def tree_nearest_node(self, lat, lon):
+        best = self.node_tree.data
+        best_dist = float('inf')
+
+        def search(tree, depth):
+            
+            if tree is None:
+                return
+            
+            nonlocal best
+            nonlocal best_dist
+            
+            tree_lat = self.nodes[tree.data]['lat']
+            tree_lon = self.nodes[tree.data]['lon']
+            distance = self.euclidean_distance(lat, lon, tree_lat, tree_lon)
+            if distance < best_dist:
+                best = tree.data
+                best_dist = distance
+            
+            diff = 0
+            if depth % 2 == 0:
+                diff = lat - self.nodes[tree.data]['lat']
+            else:
+                diff = lon - self.nodes[tree.data]['lon']
+
+            if diff <= 0:
+                close, away = tree.left, tree.right
+            else:
+                close, away = tree.right, tree.left
+            
+            search(tree=close, depth=depth+1)
+            if diff**2 < best_dist:
+                search(tree=away, depth=depth+1)
+        
+        search(self.node_tree, 0)
+        return best
+
 
     #region utils
     def create_edges_dict(self, filename):
@@ -159,27 +224,27 @@ class NotUber:
             driver = self.driver_nodes[driver_node].popleft()
             self.waiting_drivers.remove(driver)
 
-            d1, d2 = self.assign_ride(driver, passenger, dist)
+            d1, d2 = self.assign_ride(driver, passenger, 60 * dist)
             
             d1_total += d1
             d2_total += d2
         
         return d1_total, d2_total
 
-    def assign_ride(self, driver, passenger, hours_to_pickup):
+    def assign_ride(self, driver, passenger, min_to_pickup):
 
         passenger_source_node = self.find_closest_node(passenger[1], passenger[2])
         passenger_dest_node = self.find_closest_node(passenger[3], passenger[4])
 
 
         # float representing hours: pick up to drop off time
-        travel_time = self.calc_travel_time(passenger_source_node, passenger_dest_node, self.timestamp)
+        delivery_time= 60 * self.calc_travel_time(passenger_source_node, passenger_dest_node, self.timestamp)
 
         # float representing hours
-        total_travel_time = hours_to_pickup + travel_time
+        trip_time = min_to_pickup + delivery_time
 
         # date time object
-        arrival_time = self.timestamp + timedelta(hours=total_travel_time)
+        arrival_time = self.timestamp + timedelta(minutes=trip_time)
 
         # drivers log off starting after 4 hours of being logged on
         # drivers always log off after finsihing a ride if they've been logged on for more than 9 hours
@@ -192,19 +257,18 @@ class NotUber:
             heapq.heappush(self.driver_re_entry, driver)
 
         # for benchmarking
-        d1 = (arrival_time - passenger[0]).total_seconds() / 60
-        d2 = (travel_time - hours_to_pickup) * 60 
+        passenger_wait = (self.timestamp - passenger[0]).total_seconds() / 60
+        d1 = passenger_wait + trip_time
+        d2 = delivery_time - min_to_pickup
+
+        self.total_delivery_time += delivery_time
+        self.total_pickup_time += min_to_pickup
+        self.total_passenger_match_wait += passenger_wait
+
         return d1, d2
 
     def find_closest_node(self, lat, lon):
-        closest_node = None
-        min_distance = float('inf')
-        for node_id, coords in self.nodes.items():
-            dist = self.euclidean_distance(lat, lon, coords['lat'], coords['lon'])
-            if dist < min_distance:
-                min_distance = dist
-                closest_node = node_id
-        return closest_node
+        return self.tree_nearest_node(lat, lon)
     
     def dijkstra(self, source, dest, day_hour):
         pq = [(0, source)]  # Priority queue as a min-heap with (distance, node)
@@ -307,11 +371,21 @@ sim_duration = (end_time - preprocess_time).total_seconds() / 60
 unmatched_passengers = len(not_uber.waiting_passengers)
 unmatched_drivers = len(not_uber.waiting_drivers)
 
-print("unmatched passengers: ", unmatched_passengers)
-print("unmatched drivers: ", unmatched_drivers)
+print("unmatched passengers:\t", unmatched_passengers)
+print("unmatched drivers:\t", unmatched_drivers)
 
-print("average d1: ", d1_total / (num_passengers - unmatched_passengers))
-print("average d2: ", d2_total / num_drivers)
+print()
 
-print("total time: ", duration)
-print("simulation time: ", sim_duration)
+print("average d1 per passenger:\t", d1_total / (num_passengers - unmatched_passengers))
+print("average d2 per driver:\t", d2_total / num_drivers)
+
+print()
+
+print("average pickup time per ride:\t", not_uber.total_pickup_time / num_passengers)
+print("average delivery time per ride:\t", not_uber.total_delivery_time / num_passengers)
+print("average passenger match wait per ride:\t", not_uber.total_passenger_match_wait / num_passengers)
+
+print()
+
+print("total time:\t", duration)
+print("simulation time:\t", sim_duration)
