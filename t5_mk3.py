@@ -504,7 +504,7 @@ duration = (end_time - start_time).total_seconds() / 60
 sim_duration = (end_time - preprocess_time).total_seconds() / 60
 
 unmatched_passengers = len(not_uber.waiting_passengers) + not_uber.passengers_left + not_uber.sleeping_passengers
-unmatched_drivers = len(not_uber.waiting_drivers)
+unmatched_drivers = len(not_uber.waiting_drivers) + not_uber.sleeping_drivers
 num_rides = num_passengers - unmatched_passengers
 
 print()
