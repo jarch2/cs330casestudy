@@ -424,7 +424,7 @@ start_time = datetime.now()
 print("starting at ", start_time)
 
 not_uber = NotUber()
-not_uber.heuristic_mph = 60 # set the miles per hour to use in the heuristic function
+not_uber.heuristic_mph = 30 # set the miles per hour to use in the heuristic function
 print("setting heuristic mph to", not_uber.heuristic_mph)
 
 preprocess_time = datetime.now()
