@@ -25,7 +25,9 @@ class NotUber:
         
         self.timestamp = 0
         self.driver_re_entry = []
+        self.passenger_re_entry = []
         heapq.heapify(self.driver_re_entry)
+        heapq.heapify(self.passenger_re_entry)
 
         #specific to t3
         self.waiting_passengers = deque()
@@ -182,15 +184,27 @@ class NotUber:
         if self.driver_queue : driver_time = self.driver_queue[0][0]
         re_entry_time = datetime(9999, 1, 1)
         if self.driver_re_entry : re_entry_time = self.driver_re_entry[0][0]
+        passenger_re_entry_time = datetime(9999,1,1)
+        if self.passenger_re_entry : passenger_re_entry_time = self.passenger_re_entry[0][0]
 
 
         self.timestamp = min(passenger_time, driver_time, re_entry_time)
         if (self.timestamp == passenger_time):
             passenger = self.passenger_queue.popleft()
+            passenger.append(passenger[0])
             self.waiting_passengers.append(passenger)
 
             node = self.find_closest_node(passenger[1], passenger[2])
             if node not in self.passenger_nodes.keys():
+                self.passenger_nodes[node] = deque()
+            self.passenger_nodes[node].append(passenger)
+
+        if (self.timestamp == passenger_re_entry_time):
+            passenger = heapq.heappop(self.passenger_re_entry)
+            self.waiting_passengers.append(passenger)
+
+            node = self.find_closest_node(passenger[1], passenger[2])
+            if node not in self.passenger_nodes:
                 self.passenger_nodes[node] = deque()
             self.passenger_nodes[node].append(passenger)
 
@@ -217,11 +231,11 @@ class NotUber:
 
     
     def try_match(self):
-        cutoff = 500
+        cutoff = 10
+        re_match_time = 10
         d1_total = 0
         d2_total = 0
-        removed_passengers = deque()
-        removed_drivers = deque()
+
         while self.waiting_passengers and self.waiting_drivers:
             selected_driver = None
             selected_passenger = None
@@ -241,14 +255,15 @@ class NotUber:
                 if driver_node == None:
                     print("something very wrong")
 
-                passenger_wait = (self.timestamp - selected_passenger[0]).total_seconds() / 60
+                passenger_wait = (self.timestamp - selected_passenger[5]).total_seconds() / 60
 
                 if (dist * 60 * (passenger_wait + 1) < cutoff):
                     selected_driver = self.driver_nodes[driver_node].popleft()
                     if len(self.driver_nodes[driver_node]) == 0: self.driver_nodes.pop(driver_node)
                     self.waiting_drivers.remove(selected_driver)
                 else:
-                    removed_passengers.append(selected_passenger)
+                    selected_passenger[0] = self.timestamp + timedelta(minutes = re_match_time)
+                    heapq.heappush(self.passenger_re_entry, selected_passenger)
             
             # if drivers < passengers
             else:
@@ -264,34 +279,21 @@ class NotUber:
                     print("something very wrong")
 
                 temp_passenger = self.passenger_nodes[passenger_node].popleft()
-                passenger_wait = (self.timestamp - temp_passenger[0]).total_seconds() / 60
+                passenger_wait = (self.timestamp - temp_passenger[5]).total_seconds() / 60
                 if (dist * 60 * (passenger_wait + 1) < cutoff):
                     selected_passenger = temp_passenger
                     if len(self.passenger_nodes[passenger_node]) == 0: self.passenger_nodes.pop(passenger_node)
                     self.waiting_passengers.remove(selected_passenger)
                 else:
                     self.passenger_nodes[passenger_node].appendleft(temp_passenger)
-                    removed_drivers.append(selected_driver)
+                    selected_driver[0] = self.timestamp + timedelta(minutes = re_match_time)
+                    heapq.heappush(self.driver_re_entry, selected_driver)
 
             if selected_driver != None and selected_passenger != None:
                 d1, d2 = self.assign_ride(selected_driver, selected_passenger, 60 * dist)
         
             d1_total += d1
             d2_total += d2
-        
-        for passenger in removed_passengers:
-            self.waiting_passengers.append(passenger)
-            node = self.find_closest_node(passenger[1], passenger[2])
-            if node not in self.passenger_nodes.keys():
-                self.passenger_nodes[node] = deque()
-            self.passenger_nodes[node].append(passenger)
-
-        for driver in removed_drivers:
-            self.waiting_drivers.append(driver)
-            node = self.find_closest_node(driver[1], driver[2])
-            if node not in self.driver_nodes.keys():
-                self.driver_nodes[node] = deque()
-            self.driver_nodes[node].append(driver)
         
         return d1_total, d2_total
 
@@ -321,7 +323,7 @@ class NotUber:
             heapq.heappush(self.driver_re_entry, driver)
 
         # for benchmarking
-        passenger_wait = (self.timestamp - passenger[0]).total_seconds() / 60
+        passenger_wait = (self.timestamp - passenger[5]).total_seconds() / 60
         d1 = passenger_wait + trip_time
         d2 = delivery_time - min_to_pickup
 

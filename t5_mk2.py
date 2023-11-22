@@ -25,7 +25,9 @@ class NotUber:
         
         self.timestamp = 0
         self.driver_re_entry = []
+        self.passenger_re_entry = []
         heapq.heapify(self.driver_re_entry)
+        heapq.heapify(self.passenger_re_entry)
 
         #specific to t3
         self.waiting_passengers = deque()
@@ -41,6 +43,7 @@ class NotUber:
         self.total_passenger_match_wait = 0
 
         self.heuristic_mph = 0
+        self.passengers_left = 0
 
     def build_kd_tree(self, nodes, depth):
         if len(nodes) == 0:
@@ -176,17 +179,22 @@ class NotUber:
     #endregion
         
     def update_timestamp(self):
+
         passenger_time = datetime(9999, 1, 1)
         if self.passenger_queue : passenger_time = self.passenger_queue[0][0]
         driver_time = datetime(9999, 1, 1)
         if self.driver_queue : driver_time = self.driver_queue[0][0]
         re_entry_time = datetime(9999, 1, 1)
         if self.driver_re_entry : re_entry_time = self.driver_re_entry[0][0]
+        passenger_re_entry_time = datetime(9999,1,1)
+        if self.passenger_re_entry : passenger_re_entry_time = self.passenger_re_entry[0][0]
 
 
         self.timestamp = min(passenger_time, driver_time, re_entry_time)
+
         if (self.timestamp == passenger_time):
             passenger = self.passenger_queue.popleft()
+            passenger.append(passenger[0])
             self.waiting_passengers.append(passenger)
 
             node = self.find_closest_node(passenger[1], passenger[2])
@@ -194,8 +202,18 @@ class NotUber:
                 self.passenger_nodes[node] = deque()
             self.passenger_nodes[node].append(passenger)
 
+        if (self.timestamp == passenger_re_entry_time):
+            passenger = heapq.heappop(self.passenger_re_entry)
+            self.waiting_passengers.append(passenger)
+
+            node = self.find_closest_node(passenger[1], passenger[2])
+            if node not in self.passenger_nodes:
+                self.passenger_nodes[node] = deque()
+            self.passenger_nodes[node].append(passenger)
+
         if (self.timestamp == driver_time):
             driver = self.driver_queue.popleft()
+            driver.append(driver[0])
             driver.append(driver[0])
             self.waiting_drivers.append(driver)
 
@@ -217,44 +235,36 @@ class NotUber:
 
     
     def try_match(self):
+        cutoff = 15
+        re_match_time = 10
         d1_total = 0
         d2_total = 0
+
         while self.waiting_passengers and self.waiting_drivers:
-            # if passengers < drivers
-            if len(self.waiting_passengers) < len(self.waiting_drivers):
-                selected_passenger = self.waiting_passengers.popleft()
-
-                passenger_node = self.find_closest_node(selected_passenger[1], selected_passenger[2])
-                self.passenger_nodes[passenger_node].remove(selected_passenger)
-                if len(self.passenger_nodes[passenger_node]) == 0: self.passenger_nodes.pop(passenger_node)
-
-                driver_node, dist = self.find_closest_driver_node(passenger_node)
-
-                if driver_node == None:
-                    print("something very wrong")
-
-                selected_driver = self.driver_nodes[driver_node].popleft()
-                if len(self.driver_nodes[driver_node]) == 0: self.driver_nodes.pop(driver_node)
-                self.waiting_drivers.remove(selected_driver)
+            selected_driver = None
+            selected_passenger = None
+            d1 = 0
+            d2 = 0
             
-            # if drivers < passengers
-            else:
-                selected_driver = self.waiting_drivers.popleft()
+            selected_driver = self.waiting_drivers.popleft()
 
-                driver_node = self.find_closest_node(selected_driver[1], selected_driver[2])
-                self.driver_nodes[driver_node].remove(selected_driver)
-                if len(self.driver_nodes[driver_node]) == 0: self.driver_nodes.pop(driver_node)
+            driver_node = self.find_closest_node(selected_driver[1], selected_driver[2])
+            self.driver_nodes[driver_node].remove(selected_driver)
+            if len(self.driver_nodes[driver_node]) == 0: self.driver_nodes.pop(driver_node)
 
-                passenger_node, dist = self.find_closest_passenger_node(driver_node)
+            passenger_node, dist = self.find_closest_passenger_node(driver_node, 60 * cutoff)
 
-                if passenger_node == None:
-                    print("something very wrong")
-
+            driver_idle_time = (self.timestamp - selected_driver[4]).total_seconds() / 60
+            if passenger_node != None and (dist * 60 < cutoff): #* (driver_idle_time + 1)):
                 selected_passenger = self.passenger_nodes[passenger_node].popleft()
                 if len(self.passenger_nodes[passenger_node]) == 0: self.passenger_nodes.pop(passenger_node)
                 self.waiting_passengers.remove(selected_passenger)
+            else:
+                selected_driver[0] = self.timestamp + timedelta(minutes = re_match_time)
+                heapq.heappush(self.driver_re_entry, selected_driver)
 
-            d1, d2 = self.assign_ride(selected_driver, selected_passenger, 60 * dist)
+            if selected_driver != None and selected_passenger != None:
+                d1, d2 = self.assign_ride(selected_driver, selected_passenger, 60 * dist)
         
             d1_total += d1
             d2_total += d2
@@ -282,12 +292,13 @@ class NotUber:
         if random.random() > ((hours_logged - 4) / 5):
             # set the new entry time, lat, and lon for driver as the drop off of the previous passenger
             driver[0] = arrival_time
+            driver[4] = arrival_time
             driver[1] = self.nodes[passenger_dest_node]['lat']
             driver[2] = self.nodes[passenger_dest_node]['lon']
             heapq.heappush(self.driver_re_entry, driver)
 
         # for benchmarking
-        passenger_wait = (self.timestamp - passenger[0]).total_seconds() / 60
+        passenger_wait = (self.timestamp - passenger[5]).total_seconds() / 60
         d1 = passenger_wait + trip_time
         d2 = delivery_time - min_to_pickup
 
@@ -371,7 +382,7 @@ class NotUber:
         print("xxxyyyzzz")
         return None, None
     
-    def find_closest_passenger_node(self, driver_node):
+    def find_closest_passenger_node(self, driver_node, cutoff):
         def datetime_to_string(dt):
             if dt.weekday() >= 5:
                 day_type = 'weekend'
@@ -387,8 +398,16 @@ class NotUber:
         while pq:
             (dist, current_node) = heapq.heappop(pq)
 
-            if current_node in self.passenger_nodes.keys() and len(self.passenger_nodes[current_node]) > 0:
-                return current_node, dist
+            if current_node in self.passenger_nodes.keys():
+                while len(self.passenger_nodes[current_node]) > 0:
+                    passenger = self.passenger_nodes[current_node].popleft()
+                    passenger_wait = (self.timestamp - passenger[5]).total_seconds() / 60
+                    if passenger_wait < 20:
+                        self.passenger_nodes[current_node].appendleft(passenger)
+                        return current_node, dist
+                    else:
+                        self.waiting_passengers.remove(passenger)
+                        self.passengers_left += 1
 
             if current_node in visited:
                 continue
@@ -397,8 +416,8 @@ class NotUber:
 
             for neighbor in self.adjacency.get(current_node, {}):
                 if neighbor not in visited:
-                    weight = self.adjacency[current_node][neighbor][day_hour]  
-                    heapq.heappush(pq, (dist + weight, neighbor))
+                    newcost = dist + self.adjacency[current_node][neighbor][day_hour]  
+                    if newcost < cutoff: heapq.heappush(pq, (newcost, neighbor))
 
         print("xxxyyyzzz")
         return None, None
@@ -424,7 +443,7 @@ start_time = datetime.now()
 print("starting at ", start_time)
 
 not_uber = NotUber()
-not_uber.heuristic_mph = 30 # set the miles per hour to use in the heuristic function
+not_uber.heuristic_mph = 1 # set the miles per hour to use in the heuristic function
 print("setting heuristic mph to", not_uber.heuristic_mph)
 
 preprocess_time = datetime.now()
@@ -437,10 +456,22 @@ d2_total = 0
 num_passengers = len(not_uber.passenger_queue)
 num_drivers = len(not_uber.driver_queue)
 
+tick = 0
 while not_uber.passenger_queue or not_uber.driver_queue or not_uber.driver_re_entry:
     d1, d2 = not_uber.update_timestamp()
     if d1 : d1_total += d1
     if d2 : d2_total += d2
+    tick += 1
+    if tick % 2000 == 0:
+        print()
+        print(not_uber.timestamp)
+        print("waiting drivers:\t", len(not_uber.waiting_drivers))
+        print("re-entering drivers:\t", len(not_uber.driver_re_entry))
+        print("waiting passengers:\t", len(not_uber.waiting_passengers))
+        print("passengers left:\t", not_uber.passengers_left)
+    if datetime(2014, 4, 27, 6) < not_uber.timestamp:
+        print("sim over")
+        break
 
 
 end_time = datetime.now()
@@ -450,18 +481,18 @@ sim_duration = (end_time - preprocess_time).total_seconds() / 60
 
 unmatched_passengers = len(not_uber.waiting_passengers)
 unmatched_drivers = len(not_uber.waiting_drivers)
-num_rides = num_passengers - unmatched_passengers
+num_rides = num_passengers - unmatched_passengers - not_uber.passengers_left
 
 print()
 
 print("unmatched passengers:\t", unmatched_passengers)
 print("unmatched drivers:\t", unmatched_drivers)
+print("passengers left:\t", not_uber.passengers_left)
 
 print()
 
 print("average d1:\t", d1_total / num_rides)
 print("average d2:\t", d2_total / num_rides)
-print("total d2:\t", d2_total)
 
 print()
 
